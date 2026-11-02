@@ -1,0 +1,249 @@
+#include "common/format.h"
+#include "common/textModifier.h"
+#include "fastfetch.h"
+
+#include <stdlib.h>
+
+static void verify(const char* format, const char* arg, const char* expected, int lineNo) {
+    FF_STRBUF_AUTO_DESTROY result = ffStrbufCreate();
+    FF_STRBUF_AUTO_DESTROY formatter = ffStrbufCreateStatic(format);
+    const FFformatarg arguments[] = { { .type = FF_ARG_TYPE_STRING, arg } };
+    ffParseFormatString(&result, &formatter, 1, arguments);
+    if (!ffStrbufEqualS(&result, expected)) {
+        fprintf(stderr, FASTFETCH_TEXT_MODIFIER_ERROR "[%d] %s: expected \"%s\", got \"%s\"\n" FASTFETCH_TEXT_MODIFIER_RESET, lineNo, format, expected, result.chars);
+        exit(1);
+    }
+}
+
+#define VERIFY(format, argument, expected) verify((format), (argument), (expected), __LINE__)
+
+static void verify2(const char* format, const char* arg1, const char* arg2, const char* expected, int lineNo) {
+    FF_STRBUF_AUTO_DESTROY result = ffStrbufCreate();
+    FF_STRBUF_AUTO_DESTROY formatter = ffStrbufCreateStatic(format);
+    const FFformatarg arguments[] = { { .type = FF_ARG_TYPE_STRING, arg1 }, { .type = FF_ARG_TYPE_STRING, arg2 } };
+    ffParseFormatString(&result, &formatter, 2, arguments);
+    if (!ffStrbufEqualS(&result, expected)) {
+        fprintf(stderr, FASTFETCH_TEXT_MODIFIER_ERROR "[%d] %s: expected \"%s\", got \"%s\"\n" FASTFETCH_TEXT_MODIFIER_RESET, lineNo, format, expected, result.chars);
+        exit(1);
+    }
+}
+
+#define VERIFY2(format, argument1, argument2, expected) verify2((format), (argument1), (argument2), (expected), __LINE__)
+
+int main(void) {
+    instance.config.display.pipe = true;
+
+    {
+        VERIFY("output({})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({})", "", "output()");
+        VERIFY("output({1})", "", "output()");
+    }
+
+    {
+        VERIFY("output({1:20})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1:11})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1:-11})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1:6})", "12345 67890", "output(12345)");
+        VERIFY("output({:6})", "12345 67890", "output(12345)");
+        VERIFY("output({:-6})", "12345 67890", "output(12345…)");
+        VERIFY("output({:0})", "12345 67890", "output()");
+        VERIFY("output({:})", "12345 67890", "output()");
+    }
+
+    {
+        VERIFY("output({1<20})", "12345 67890", "output(12345 67890         )");
+        VERIFY("output({1<-20})", "12345 67890", "output(12345 67890         )");
+        VERIFY("output({1<11})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1<-11})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1<6})", "12345 67890", "output(12345 )");
+        VERIFY("output({<6})", "12345 67890", "output(12345 )");
+        VERIFY("output({<-6})", "12345 67890", "output(12345…)");
+        VERIFY("output({<0})", "12345 67890", "output()");
+        VERIFY("output({<})", "12345 67890", "output()");
+    }
+
+    {
+        VERIFY("output({1>20})", "12345 67890", "output(         12345 67890)");
+        VERIFY("output({1>-20})", "12345 67890", "output(         12345 67890)");
+        VERIFY("output({1>11})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1>-11})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1>6})", "12345 67890", "output(12345 )");
+        VERIFY("output({>6})", "12345 67890", "output(12345 )");
+        VERIFY("output({>-6})", "12345 67890", "output(12345…)");
+        VERIFY("output({>0})", "12345 67890", "output()");
+        VERIFY("output({>})", "12345 67890", "output()");
+    }
+
+    {
+        VERIFY("output({1|20})", "12345 67890", "output(    12345 67890     )");
+        VERIFY("output({1|-20})", "12345 67890", "output(    12345 67890     )");
+        VERIFY("output({1|11})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1|-11})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1|6})", "12345 67890", "output(12345 )");
+        VERIFY("output({|6})", "12345 67890", "output(12345 )");
+        VERIFY("output({|-6})", "12345 67890", "output(12345…)");
+        VERIFY("output({|0})", "12345 67890", "output()");
+        VERIFY("output({|})", "12345 67890", "output()");
+    }
+
+    {
+        VERIFY("output({1n>20})", "12345 67890", "output({1n>20})");
+        VERIFY("output({120})", "12345 67890", "output({120})");
+        VERIFY("output({1:11})", "", "output()");
+        VERIFY("output({2:2})", "", "output({2:2})");
+    }
+
+    {
+        VERIFY("output({1~0})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1~1})", "12345 67890", "output(2345 67890)");
+        VERIFY("output({1~10})", "12345 67890", "output(0)");
+        VERIFY("output({1~20})", "12345 67890", "output()");
+        VERIFY("output({1~-5})", "12345 67890", "output(67890)");
+        VERIFY("output({1~-50})", "12345 67890", "output()");
+        VERIFY("output({1~0,1})", "12345 67890", "output(1)");
+        VERIFY("output({1~0,6})", "12345 67890", "output(12345 )");
+        VERIFY("output({1~0,10})", "12345 67890", "output(12345 6789)");
+        VERIFY("output({1~5,10})", "12345 67890", "output( 6789)");
+        VERIFY("output({1~5,100})", "12345 67890", "output( 67890)");
+        VERIFY("output({1~10,10})", "12345 67890", "output()");
+        VERIFY("output({1~10,5})", "12345 67890", "output()");
+        VERIFY("output({1~3,-3})", "12345 67890", "output(45 67)");
+        VERIFY("output({1~0,-12})", "12345 67890", "output()");
+        VERIFY("output({1~-5,-3})", "12345 67890", "output(67)");
+        VERIFY("output({1~-0,10})", "12345 67890", "output(12345 6789)");
+        VERIFY("output({1~-3,-5})", "12345 67890", "output()");
+        VERIFY("output({1~11,12})", "12345 67890", "output()");  // Same as {1~11}
+        VERIFY("output({1~20,30})", "12345 67890", "output()");  // Same as {1~20}
+        VERIFY("output({1~-50,3})", "12345 67890", "output()");  // Same as {1~-50}
+        VERIFY("output({1~-50,-1})", "12345 67890", "output()"); // Same as {1~-50}
+        VERIFY("output({1~})", "12345 67890", "output(12345 67890)");   // Same as {1~0}
+        VERIFY("output({1~-0})", "12345 67890", "output(12345 67890)"); // Same as {1~0}
+        VERIFY("output({1~,-1})", "12345 67890", "output(12345 6789)"); // Same as {1~0,-1}
+        VERIFY("output({1~,})", "12345 67890", "output()");             // Same as {1~0,0}
+    }
+
+    {
+        VERIFY("output({1n~0})", "12345 67890", "output({1n~0})");
+        VERIFY("output({1~<0})", "12345 67890", "output({1~<0})");
+        VERIFY("output({1~-})", "12345 67890", "output({1~-})");
+        VERIFY("output({1~-,1})", "12345 67890", "output({1~-,1})");
+        VERIFY("output({1~0,,1})", "12345 67890", "output({1~0,,1})");
+        VERIFY("output({1~0,1,})", "12345 67890", "output({1~0,1,})");
+        VERIFY("output({1~,0,1})", "12345 67890", "output({1~,0,1})");
+        VERIFY("output({2,0})", "12345 67890", "output({2,0})");
+    }
+
+    {
+        VERIFY("output({1:20}{1<20}{1>20})", "12345 67890", "output(12345 6789012345 67890                  12345 67890)");
+        VERIFY("output({?1}OK{?}{/1}NOT OK{/})", "12345 67890", "output(OK)");
+        VERIFY("output({?1}OK{?}{/1}NOT OK{/})", "", "output(NOT OK)");
+    }
+
+    {
+        // a skipped conditional may hold conditionals of its own
+        VERIFY2("{?1}A{?2}B{?}C{?}D", "x", "x", "ABCD");
+        VERIFY2("{?1}A{?2}B{?}C{?}D", "x", "", "ACD");
+        VERIFY2("{?1}A{?2}B{?}C{?}D", "", "x", "D");
+        VERIFY2("{?1}A{?2}B{?}C{?}D", "", "", "D");
+        VERIFY2("{/1}A{/2}B{/}C{/}D", "", "", "ABCD");
+        VERIFY2("{/1}A{/2}B{/}C{/}D", "", "x", "ACD");
+        VERIFY2("{/1}A{/2}B{/}C{/}D", "x", "", "D");
+        VERIFY2("{/1}A{/2}B{/}C{/}D", "x", "x", "D");
+        VERIFY2("{?1}A{?1}B{?1}C{?}D{?}E{?}F", "", "", "F");
+        VERIFY2("{?1}{/2}A{/}B{?}C", "", "", "C");
+
+        // a conditional with an invalid argument does not open a block
+        VERIFY2("{?1}A{?3}B{?}C", "", "x", "C");
+        VERIFY2("{?1}A{?3}B{?}C{?}D", "", "x", "C{?}D");
+
+        // an escaped brace does not start a placeholder
+        VERIFY2("{?1}{{?}}A{?}B", "", "", "B");
+        VERIFY2("{?1}{{?2}A{?}B", "", "x", "B");
+    }
+
+    {
+        VERIFY("output({1:3})", "\e[1m12345", "output(\e[1m123)");
+        VERIFY("output({1:-3})", "\e[1m12345", "output(\e[1m123…)");
+        VERIFY("output({1:3})", "\e[1m12345\e[m", "output(\e[1m123\e[m)");
+        VERIFY("output({1:-3})", "\e[1m12345\e[m", "output(\e[1m123…\e[m)");
+    }
+
+    {
+        VERIFY("output({1<8})", "\e[1m12345", "output(\e[1m12345   )");
+        VERIFY("output({1>8})", "\e[1m12345", "output(\e[1m   12345)");
+        VERIFY("output({1<8})", "\e[1m12345\e[m", "output(\e[1m12345   \e[m)");
+        VERIFY("output({1>8})", "\e[1m12345\e[m", "output(\e[1m   12345\e[m)");
+        VERIFY("output({1<1})", "\e[30;47m12345\e[m", "output(\e[30;47m1\e[m)");
+        VERIFY("output({1|8})", "\e[1m12345\e[m", "output(\e[1m 12345  \e[m)");
+        VERIFY("output({1|1})", "\e[30;47m12345\e[m", "output(\e[30;47m1\e[m)");
+    }
+
+    {
+        VERIFY("output({1~0})", "\e[1m12345", "output(\e[1m12345)");
+        VERIFY("output({1~1})", "\e[1m12345", "output(\e[1m2345)");
+        VERIFY("output({1~0})", "\e[1m12345\e[m", "output(\e[1m12345\e[m)");
+        VERIFY("output({1~1})", "\e[1m12345\e[m", "output(\e[1m2345\e[m)");
+        VERIFY("output({1~2})", "\e[30;47m12345\e[m", "output(\e[30;47m345\e[m)");
+    }
+
+    {
+        // All leading escape codes must be skipped, not just the first one
+        VERIFY("output({1:3})", "\e[31m\e[1m12345", "output(\e[31m\e[1m123)");
+        VERIFY("output({1:-3})", "\e[31m\e[1m12345", "output(\e[31m\e[1m123…)");
+        VERIFY("output({1<8})", "\e[31m\e[1m12345", "output(\e[31m\e[1m12345   )");
+        VERIFY("output({1~2})", "\e[31m\e[1m12345", "output(\e[31m\e[1m345)");
+
+        // ... and so must all trailing ones
+        VERIFY("output({1:3})", "\e[31m\e[1m12345\e[m\e[39m", "output(\e[31m\e[1m123\e[m\e[39m)");
+        VERIFY("output({1~2})", "\e[31m\e[1m12345\e[m\e[39m", "output(\e[31m\e[1m345\e[m\e[39m)");
+        VERIFY("output({1<8})", "\e[31m\e[1m12345\e[m\e[39m", "output(\e[31m\e[1m12345   \e[m\e[39m)");
+
+        // `\e[?25l` is a complete CSI sequence, not just `\e[?`
+        VERIFY("output({1:3})", "\e[?25l12345", "output(\e[?25l123)");
+        VERIFY("output({1~4})", "\e[?25l12345", "output(\e[?25l5)");
+    }
+
+    {
+        // numbers that don't fit in 32 bits must not wrap around to a valid value
+        VERIFY("output({4294967296})", "x", "output({4294967296})");
+        VERIFY("output({4294967297})", "x", "output({4294967297})");
+        VERIFY("output({99999999999999999999})", "x", "output({99999999999999999999})");
+        VERIFY("output({1~4294967297})", "12345 67890", "output()");
+        VERIFY("output({1~-4294967297})", "12345 67890", "output()");
+        VERIFY("output({1~0,4294967296})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1:4294967297})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1:-4294967296})", "12345 67890", "output(12345 67890)");
+
+        // the length is negated for the ellipsis, which overflows for the smallest int32
+        VERIFY("output({1:-2147483648})", "12345 67890", "output(12345 67890)");
+        VERIFY("output({1:-2147483647})", "12345 67890", "output(12345 67890)");
+    }
+
+#ifndef _WIN32 // Windows doesn't have setenv
+    {
+        ffListInit(&instance.config.display.constants);
+        ffStrbufInitStatic(FF_LIST_ADD(FFstrbuf, instance.config.display.constants), "CONST1");
+        ffStrbufInitStatic(FF_LIST_ADD(FFstrbuf, instance.config.display.constants), "CONST2");
+        setenv("FF_TEST", "ENVVAR", 1);
+        VERIFY("output({$FF_TEST})", "", "output(ENVVAR)");
+        VERIFY("output({$1})", "", "output(CONST1)");
+        VERIFY("output({$FF_TEST}{$1})", "", "output(ENVVARCONST1)");
+        VERIFY("output({$1}{$FF_TEST})", "", "output(CONST1ENVVAR)");
+        VERIFY("output({$FF_TEST}{$FF_TEST})", "", "output(ENVVARENVVAR)");
+        VERIFY("output({$1}{$-1})", "", "output(CONST1CONST2)");
+
+        VERIFY("output({$FF_INVAL})", "", "output({$FF_INVAL})");
+        VERIFY("output({$9}{$0}${-9})", "", "output({$9}{$0}${-9})");
+        VERIFY("output({$1NO})", "", "output({$1NO})");
+
+        // numbers that don't fit in 32 bits must not wrap around to a valid index
+        VERIFY("output({$4294967297})", "", "output({$4294967297})");
+        VERIFY("output({$-4294967297})", "", "output({$-4294967297})");
+        ffListDestroy(&instance.config.display.constants);
+    }
+#endif
+
+    // Success
+    puts("\033[32mAll tests passed!" FASTFETCH_TEXT_MODIFIER_RESET);
+}
