@@ -79,7 +79,7 @@ cmake --build build -j
 
 ## Credit
 
-Forked from [fastfetch](https://github.com/fastfetch-cli/fastfetch) (MIT).
+This repo is a lazy AI generated fork of [fastfetch](https://github.com/fastfetch-cli/fastfetch) (MIT).
 Original copyright: Linus Dierheimer and Carter Li. See [LICENSE](LICENSE).
 All credit for the fetch engine, platform detection and documentation goes to the
 fastfetch maintainers and contributors. This fork adds exactly one thing.
