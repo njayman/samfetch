@@ -1,0 +1,46 @@
+name: Reusable Solaris amd64
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_BUILD_TYPE: ${{ vars.CMAKE_BUILD_TYPE || 'RelWithDebInfo' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: run VM
+        uses: vmactions/solaris-vm@1c166978f5a2c1f87f1c9d4d8dd85ae3d1eff6f7 # v1.4.2
+        with:
+          usesh: true
+          envs: 'CMAKE_BUILD_TYPE'
+          release: "11.4-gcc-14"
+          prepare: |
+            uname -a
+            pkg install cmake git pkg-config glib2 dbus sqlite-3 imagemagick ninja dconf mesa lua
+
+          run: |
+            export PKG_CONFIG_PATH=/usr/lib/64/pkgconfig
+            cmake -DSET_TWEAK=Off -DBUILD_TESTS=On -GNinja -DCMAKE_C_FLAGS="-fno-pie" -DCMAKE_EXE_LINKER_FLAGS="-no-pie" .
+            cmake --build . --verbose -j4
+            ./fastfetch --list-features
+            time ./fastfetch -c presets/ci.jsonc --stat false
+            time ./fastfetch -c presets/ci.jsonc --format json
+            time ./flashfetch
+            ldd fastfetch
+            ctest --output-on-failure
+            echo 'set(CPACK_PACKAGE_FILE_NAME "fastfetch-solaris-amd64")' >> CPackConfig.cmake
+            cpack -V
+
+      - name: upload artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fastfetch-solaris-amd64
+          path: ./fastfetch-*.*
